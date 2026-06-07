@@ -16,3 +16,7 @@ It provides a simple Python payroll utility package with a deliberately opaque p
 This repository demonstrates GitHub Projects, Codespaces, Copilot SDLC , Actions, Advanced Security, and repository governance.
 
 Auto-close test.
+
+## Pull request workflow
+
+Changes to this repository are reviewed through pull requests. Automated checks run on each pull request to validate quality, dependency risk, and security posture before changes are merged.
