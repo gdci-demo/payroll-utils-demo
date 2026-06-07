@@ -45,9 +45,4 @@ jobs:
           | Trigger | ${{ github.event_name }} |
           | Branch | ${{ github.ref_name }} |
           | Commit | ${{ github.sha }} |
-
-          ## Business value
-          - Automated quality validation on every pull request
-          - Repeatable SDLC checks without manual effort
-          - Visible evidence for delivery and engineering leadership
           EOF
