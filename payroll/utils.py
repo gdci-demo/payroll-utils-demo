@@ -2,6 +2,8 @@
 
 import re
 
+# Temporary push protection test
+PAYROLL_API_TOKEN = "ghp_demoPayrollToken1234567890abcdef"
 
 def is_valid_payroll_id(payroll_id: str) -> bool:
     """Return True when a payroll ID matches the exact allowed format.
