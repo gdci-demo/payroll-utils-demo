@@ -1,0 +1,40 @@
+name: Dependency review
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+      - name: Add Dependency review summary
+        run: |
+          cat <<'EOF' >> $GITHUB_STEP_SUMMARY
+          # Dependency review summary
+          | Item | Result |
+          | --- | --- |
+          | Dependency review checks dependency changes introduced by the PR | ✅ |
+          | Severity gate fails on high or critical vulnerabilities | ✅ |
+          | Trigger | ${{ github.event_name }} |
+
+          ## Business value
+          - Detects risky dependency changes before merge
+          - Supports software supply chain governance
+          - Reduces late-stage vulnerability remediation
+          EOF
