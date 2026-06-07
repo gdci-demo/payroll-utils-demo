@@ -86,14 +86,14 @@ jobs:
               const def = labelDefs[name] || { color: 'ededed', description: '' };
               try {
                 await github.rest.issues.createLabel({ owner, repo, name, color: def.color, description: def.description });
-                core.info(`Created label: ${name}`);
+                console.info(`Created label: ${name}`);
               } catch (err) {
                 // Treat HTTP 422 as "label already exists"; warn on other errors
                 const status = err.status || err.statusCode || (err.response && err.response.status);
                 if (status === 422) {
-                  core.info(`Label ${name} already exists (422)`);
+                  console.info(`Label ${name} already exists (422)`);
                 } else {
-                  core.warning(`Failed creating label ${name}: ${err.message}`);
+                  console.warn(`Failed creating label ${name}: ${err.message}`);
                 }
               }
             }
@@ -101,8 +101,8 @@ jobs:
             // Add labels to the issue (avoid duplicates by API behavior)
             try {
               await github.rest.issues.addLabels({ owner, repo, issue_number, labels: labelsToApply });
-            } catch (err) {
-              core.info(`Failed to add labels: ${err.message}`);
+              } catch (err) {
+              console.info(`Failed to add labels: ${err.message}`);
             }
 
             // Build keywords for searching closed issues: pick words of length >=4
@@ -112,7 +112,7 @@ jobs:
             if (rawWords.length > 0) {
               const searchTerms = rawWords.slice(0, 5).join(' ');
               const q = `repo:${owner}/${repo} is:issue is:closed ${searchTerms}`;
-              core.info(`Search query: ${q}`);
+              console.info(`Search query: ${q}`);
               try {
                 const res = await github.rest.search.issuesAndPullRequests({ q, per_page: 10 });
                 let items = res.data.items || [];
@@ -135,7 +135,7 @@ jobs:
                   related.push({ number: it.number, title: it.title, url: it.html_url, labels: (it.labels||[]).map(l=>l.name) });
                 }
               } catch (err) {
-                core.info(`Search failed: ${err.message}`);
+                console.info(`Search failed: ${err.message}`);
               }
             }
 
@@ -179,24 +179,26 @@ jobs:
             };
             const recommended = detected.length > 0 ? (nextStepMap[detected[0]] || 'Perform initial triage and reproduce the issue.') : 'Perform initial triage and reproduce the issue.';
 
-            const commentBody = `# AI Issue Triage & RCA Assistant
+            const parts = [];
+            parts.push('# AI Issue Triage & RCA Assistant');
+            parts.push('');
+            parts.push('## Summary');
+            parts.push('This issue appears to relate to ' + (detected.length > 0 ? detected.join(', ') : 'unclassified') + ' based on the title and description.');
+            parts.push('');
+            parts.push('## Diagnostic signals');
+            parts.push(diagList);
+            parts.push('');
+            parts.push('## Suggested labels');
+            parts.push(suggestedLabels);
+            parts.push('');
+            parts.push('## Potentially related resolved RCA issues');
+            parts.push(relatedBlock);
+            parts.push('');
+            parts.push('Please review any prior RCA before starting investigation.');
+            parts.push('');
+            parts.push('## Recommended next step');
+            parts.push(recommended);
 
-## Summary
-This issue appears to relate to ${detected.length > 0 ? detected.join(', ') : 'unclassified'} based on the title and description.
-
-## Diagnostic signals
-${diagList}
-
-## Suggested labels
-${suggestedLabels}
-
-## Potentially related resolved RCA issues
-${relatedBlock}
-
-Please review any prior RCA before starting investigation.
-
-## Recommended next step
-${recommended}
-`;
+            const commentBody = parts.join('\n');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body: commentBody });
