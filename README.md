@@ -19,4 +19,4 @@ Auto-close test.
 
 ## Pull request workflow
 
-Changes to this repository are reviewed through pull requests. Automated checks run on each pull request to validate quality, dependency risk, and security posture before changes are merged.
+All changes are reviewed through pull requests with automated checks validating quality, dependencies, and security before merging.
