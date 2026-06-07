@@ -13,6 +13,6 @@ It provides a simple Python payroll utility package with a deliberately opaque p
 
 ## Demo workflow
 
-This repository demonstrates GitHub Projects, Codespaces, Copilot, Actions, Advanced Security, and repository governance.
+This repository demonstrates GitHub Projects, Codespaces, Copilot SDLC , Actions, Advanced Security, and repository governance.
 
 Auto-close test.
