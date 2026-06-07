@@ -1,0 +1,54 @@
+name: Build and attest
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    name: Build artifact and generate attestation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Package payroll artifact
+        run: tar -czf dist/payroll-utils-demo.tar.gz payroll README.md
+
+      - name: Generate artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/payroll-utils-demo.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: payroll-utils-demo
+          path: dist/payroll-utils-demo.tar.gz
+
+      - name: Add Artifact attestation summary
+        run: |
+          cat <<'EOF' >> $GITHUB_STEP_SUMMARY
+          # Artifact attestation summary
+          | Item | Value |
+          | --- | --- |
+          | Artifact name | dist/payroll-utils-demo.tar.gz |
+          | Source commit | ${{ github.sha }} |
+          | Workflow name | ${{ github.workflow }} |
+          | Run ID | ${{ github.run_id }} |
+
+          ## Business value
+          - Creates provenance for the generated artifact
+          - Helps prove what was built, from which commit, and by which workflow
+          - Supports secure SDLC and audit evidence
+          EOF

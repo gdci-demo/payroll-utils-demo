@@ -1,5 +1,5 @@
 """Payroll utility package."""
 
-from .utils import validate_payroll_id
+from .utils import is_valid_payroll_id
 
-__all__ = ["validate_payroll_id"]
+__all__ = ["is_valid_payroll_id"]
