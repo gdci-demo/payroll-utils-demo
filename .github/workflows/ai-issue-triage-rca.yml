@@ -1,0 +1,202 @@
+name: AI Issue Triage & RCA Assistant
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Optional issue number to run triage against (for manual testing)'
+        required: false
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  triage:
+    name: Triage new issue and attach RCA links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run triage script
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Resolve issue: support issue opened event or manual workflow_dispatch with input
+            let issue = context.payload.issue;
+            if (!issue && context.payload.inputs && context.payload.inputs.issue_number) {
+              const num = parseInt(context.payload.inputs.issue_number, 10);
+              if (!Number.isNaN(num)) {
+                const res = await github.rest.issues.get({ owner, repo, issue_number: num });
+                issue = res.data;
+              }
+            }
+
+            if (!issue) {
+              core.info('No issue found in event payload and no issue_number provided for manual dispatch. Exiting.');
+              return;
+            }
+
+            const issue_number = issue.number;
+            const title = (issue.title || '').trim();
+            const body = (issue.body || '').trim();
+            const combined = (title + '\n' + body).toLowerCase();
+
+            // Category keywords
+            const categoryMap = {
+              'payroll-validation': ['payroll', 'validation', 'regex'],
+              'performance': ['timeout', 'slow', 'performance', 'latency'],
+              'security': ['token', 'secret', 'credential', 'password'],
+              'dependency-risk': ['dependency', 'package', 'library', 'version'],
+              'testing': ['test', 'pytest', 'coverage']
+            };
+
+            // Label definitions (colors are readable hex values)
+            const labelDefs = {
+              'needs-triage': { color: 'FF8C00', description: 'Requires human triage' },
+              'payroll-validation': { color: '0E8A16', description: 'Payroll validation or format issues' },
+              'performance': { color: 'D93F0B', description: 'Performance, timeout, or latency issues' },
+              'security': { color: 'B60205', description: 'Security-sensitive issue' },
+              'dependency-risk': { color: 'FBCA04', description: 'Dependency or package risk' },
+              'testing': { color: '006B75', description: 'Testing and coverage related' }
+            };
+
+            // Detect categories
+            const detected = [];
+            for (const [label, keys] of Object.entries(categoryMap)) {
+              for (const k of keys) {
+                if (combined.includes(k)) {
+                  detected.push(label);
+                  break;
+                }
+              }
+            }
+
+            const labelsToApply = Array.from(new Set(['needs-triage', ...detected]));
+
+            // Ensure labels exist (create if missing)
+            for (const name of labelsToApply) {
+              const def = labelDefs[name] || { color: 'ededed', description: '' };
+              try {
+                await github.rest.issues.createLabel({ owner, repo, name, color: def.color, description: def.description });
+                core.info(`Created label: ${name}`);
+              } catch (err) {
+                // Treat HTTP 422 as "label already exists"; warn on other errors
+                const status = err.status || err.statusCode || (err.response && err.response.status);
+                if (status === 422) {
+                  core.info(`Label ${name} already exists (422)`);
+                } else {
+                  core.warning(`Failed creating label ${name}: ${err.message}`);
+                }
+              }
+            }
+
+            // Add labels to the issue (avoid duplicates by API behavior)
+            try {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: labelsToApply });
+            } catch (err) {
+              core.info(`Failed to add labels: ${err.message}`);
+            }
+
+            // Build keywords for searching closed issues: pick words of length >=4
+            const rawWords = Array.from(new Set((combined.match(/\b[a-z0-9\-]{4,}\b/g) || []).slice(0, 8)));
+
+            let related = [];
+            if (rawWords.length > 0) {
+              const searchTerms = rawWords.slice(0, 5).join(' ');
+              const q = `repo:${owner}/${repo} is:issue is:closed ${searchTerms}`;
+              core.info(`Search query: ${q}`);
+              try {
+                const res = await github.rest.search.issuesAndPullRequests({ q, per_page: 10 });
+                let items = res.data.items || [];
+                // Filter out PRs
+                items = items.filter(i => !i.pull_request);
+
+                // Prioritize items that have RCA/resolved/incident labels
+                const priority = new Set(['rca','resolved','incident','bug','payroll-validation','performance','security','dependency-risk','testing']);
+                items.sort((a,b) => {
+                  const aScore = (a.labels || []).filter(l => priority.has(l.name)).length;
+                  const bScore = (b.labels || []).filter(l => priority.has(l.name)).length;
+                  return bScore - aScore;
+                });
+
+                const seen = new Set();
+                for (const it of items) {
+                  if (related.length >= 3) break;
+                  if (seen.has(it.number)) continue;
+                  seen.add(it.number);
+                  related.push({ number: it.number, title: it.title, url: it.html_url, labels: (it.labels||[]).map(l=>l.name) });
+                }
+              } catch (err) {
+                core.info(`Search failed: ${err.message}`);
+              }
+            }
+
+            // Avoid duplicate comments: check existing comments
+            const existingComments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const alreadyPosted = (existingComments.data || []).some(c => (c.body || '').includes('# AI Issue Triage & RCA Assistant'));
+            if (alreadyPosted) {
+              core.info('Triage comment already exists on this issue; skipping comment creation.');
+              return;
+            }
+
+            // Build diagnostic signals (3-5 bullets) using simple heuristics
+            const signals = [];
+            if (combined.includes('payroll')) signals.push('Payroll-related terms detected');
+            if (combined.includes('validation') || combined.includes('regex')) signals.push('Possible validation or regex/format issue');
+            if (combined.includes('timeout') || combined.includes('slow') || combined.includes('latency')) signals.push('Performance or timeout keywords detected');
+            if (combined.includes('token') || combined.includes('secret') || combined.includes('password')) signals.push('Security-sensitive terms detected');
+            if (combined.includes('dependen') || combined.includes('package') || combined.includes('library')) signals.push('Dependency or package references detected');
+            if (combined.includes('test') || combined.includes('pytest') || combined.includes('coverage')) signals.push('Testing related terms detected');
+            if (signals.length === 0) signals.push('No clear diagnostic keywords detected; manual triage recommended');
+            const diagList = signals.slice(0,5).map(s => `- ${s}`).join('\n');
+
+            // Suggested labels list for comment
+            const suggestedLabels = labelsToApply.map(l => `- ${l}`).join('\n');
+
+            // Potentially related issues block
+            let relatedBlock = '';
+            if (related.length === 0) {
+              relatedBlock = 'No closely related resolved RCA issues were found.';
+            } else {
+              relatedBlock = related.map(r => `- #${r.number} ${r.title} \n  ${r.url}`).join('\n');
+            }
+
+            // Recommended next step based on first detected category
+            const nextStepMap = {
+              'payroll-validation': 'Review validation behavior and add or update tests.',
+              'security': 'Avoid committing secrets and verify secret scanning and push protection.',
+              'dependency-risk': 'Review dependency changes and run dependency review.',
+              'performance': 'Review logs, resource usage, and timeout behavior.',
+              'testing': 'Add or update automated tests and coverage.'
+            };
+            const recommended = detected.length > 0 ? (nextStepMap[detected[0]] || 'Perform initial triage and reproduce the issue.') : 'Perform initial triage and reproduce the issue.';
+
+            const commentBody = `# AI Issue Triage & RCA Assistant
+
+## Summary
+This issue appears to relate to ${detected.length > 0 ? detected.join(', ') : 'unclassified'} based on the title and description.
+
+## Diagnostic signals
+${diagList}
+
+## Suggested labels
+${suggestedLabels}
+
+## Potentially related resolved RCA issues
+${relatedBlock}
+
+Please review any prior RCA before starting investigation.
+
+## Recommended next step
+${recommended}
+`;
+
+            await github.rest.issues.createComment({ owner, repo, issue_number, body: commentBody });
