@@ -10,3 +10,5 @@ It provides a simple Python payroll utility package with a deliberately opaque p
 - `payroll/__init__.py` - package initializer
 - `payroll/utils.py` - payroll utility module
 - `README.md` - demo repository overview
+
+Auto-close test.
