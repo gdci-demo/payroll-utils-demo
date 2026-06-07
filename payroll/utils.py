@@ -4,14 +4,16 @@ import re
 
 
 def is_valid_payroll_id(payroll_id: str) -> bool:
-    """Return True when a payroll ID contains exactly three alphanumeric groups.
+    """Return True when a payroll ID matches the exact allowed format.
 
-    The input is normalized to uppercase and split on any non-alphanumeric separator.
-    A valid payroll ID has three groups, and each group must be 3 or 4 characters long.
+    A valid payroll ID must be:
+    - 3 uppercase letters
+    - a hyphen
+    - 4 digits
+    - a hyphen
+    - 2 or 3 uppercase letters
     """
     if not isinstance(payroll_id, str):
         return False
 
-    normalized_id = payroll_id.upper()
-    groups = re.split(r"[^0-9A-Z]+", normalized_id)
-    return len(groups) == 3 and all(len(group) in (3, 4) for group in groups)
+    return bool(re.fullmatch(r"[A-Z]{3}-\d{4}-[A-Z]{2,3}", payroll_id))
