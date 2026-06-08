@@ -1,4 +1,4 @@
-from payroll.utils import calculate_net_pay, is_valid_bank_account, is_valid_payroll_id
+from payroll.utils import calculate_net_pay, is_valid_bank_account, is_valid_payroll_id, is_string_valid
 
 
 def test_valid_payroll_id_returns_true():
@@ -20,6 +20,9 @@ def test_invalid_bank_account_returns_false_for_bad_values():
     assert is_valid_bank_account("acct-123456") is False
     assert is_valid_bank_account(123456789) is False
 
+def test_is_string_valid_returns_true_for_non_empty_string():
+    assert is_string_valid("ghp_demoPayrollToken1234567890abcdef") is True
+    assert is_string_valid("  trimmed text ") is True
 
 def test_calculate_net_pay_computes_expected_amount():
     assert calculate_net_pay(5000.00, tax_rate=0.22, deductions=150.00) == 3750.0

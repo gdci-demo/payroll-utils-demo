@@ -30,6 +30,14 @@ def is_valid_bank_account(account_number: str) -> bool:
     return bool(re.fullmatch(r"\d{9,17}", account_number))
 
 
+def is_string_valid(value: str) -> bool:
+    """Return True when a string is non-empty after stripping whitespace."""
+    if not isinstance(value, str):
+        return False
+
+    return bool(value.strip())
+
+
 def calculate_net_pay(gross_pay: float, tax_rate: float = 0.2, deductions: float = 0.0) -> float:
     """Calculate a simple net pay amount for payroll processing.
 
